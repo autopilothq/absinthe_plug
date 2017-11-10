@@ -353,9 +353,30 @@ defmodule Absinthe.Plug do
   end
 
   def run_query(query, conn_info, config) do
-    %{document: document, pipeline: pipeline} = Request.Query.add_pipeline(query, conn_info, config)
+    # This is a nasty hack.
+    #
+    # The idea is that rather than a wide-reaching refactor spanning across both absinthe-plug and
+    # absinthe to ensure that contextual information is passed to the absinthe schema when requesting
+    # types, we can save that off to the side in the process dictionary. To ensure that each time the
+    # schema is generated or requested it is genuinely fresh, we use Task.async to create a fresh
+    # task every time, and thereby a new context.
+    #
+    # No, this is not good for performance, not a wonderful security pattern, breaks the referential
+    # transparency of schema generation in surprising and not-wonderful ways, but it does enable us
+    # to move forward with dynamic schemas per authorisation/user account in a pragmatic way.
+    #
+    # Ultimately we would like to integrate support for dynamic schemas into absinthe in a
+    # manner that aligns with the project goals, but that seems pretty far off. We need a way to get
+    # this done now, and this seems (for now) like the most reliable way to do so with the smallest
+    # surface area of changes in absinthe and absinthe-plug.
+    
+    task = Task.async(fn() ->
+      :erlang.put(:conn_info, conn_info)
+      %{document: document, pipeline: pipeline} = Request.Query.add_pipeline(query, conn_info, config)
+      Absinthe.Pipeline.run(document, pipeline)
+    end)
 
-    with {:ok, %{result: result}, _} <- Absinthe.Pipeline.run(document, pipeline) do
+    with {:ok, %{result: result}, _} <- Task.await(task)  do
       {:ok, result}
     end
   end
