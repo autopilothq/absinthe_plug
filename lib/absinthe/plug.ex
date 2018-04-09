@@ -369,14 +369,14 @@ defmodule Absinthe.Plug do
     # manner that aligns with the project goals, but that seems pretty far off. We need a way to get
     # this done now, and this seems (for now) like the most reliable way to do so with the smallest
     # surface area of changes in absinthe and absinthe-plug.
-    
+
     task = Task.async(fn() ->
       :erlang.put(:conn_info, conn_info)
       %{document: document, pipeline: pipeline} = Request.Query.add_pipeline(query, conn_info, config)
       Absinthe.Pipeline.run(document, pipeline)
     end)
 
-    with {:ok, %{result: result}, _} <- Task.await(task)  do
+    with {:ok, %{result: result}, _} <- Task.await(task, 65_000)  do
       {:ok, result}
     end
   end
